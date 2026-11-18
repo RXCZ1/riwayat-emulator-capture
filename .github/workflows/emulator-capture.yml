@@ -1,0 +1,78 @@
+name: Riwayat Emulator Capture
+
+# Owner-authorized dynamic analysis of the genuine فضاء الروايات app.
+# No APKs and no secrets are stored in this repo. The genuine app is
+# downloaded at runtime from APKPure (EFForg apkeep) and installed as a
+# SYSTEM app on a rooted cloud emulator, so its own license check passes
+# on its own (installer/system-app branch). Frida then observes the live
+# HMAC-signed chapter request. Nothing here patches or bypasses any
+# license check.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install apkeep + frida, download genuine app
+        run: |
+          set -e
+          curl -sL -o apkeep "https://github.com/EFForg/apkeep/releases/download/1.1.0/apkeep-x86_64-unknown-linux-gnu"
+          chmod +x apkeep
+          ./apkeep --help | head -30
+          pip install frida-tools
+          FRIDA_VER=$(python3 -c "import frida; print(frida.__version__)")
+          echo "frida version: ${FRIDA_VER}"
+          curl -sL -o frida-server.xz "https://github.com/frida/frida/releases/download/${FRIDA_VER}/frida-server-${FRIDA_VER}-android-arm64.xz"
+          xz -d frida-server.xz
+          chmod +x frida-server
+          ls -la apkeep frida-server
+          ./apkeep -a com.fadariwyat.cenele
+          ls -la
+          XAPK=$(ls *.xapk | head -1)
+          echo "xapk: ${XAPK}"
+          test -n "$XAPK"
+          mkdir -p xapk_extract splits_sys
+          unzip -o "$XAPK" -d xapk_extract
+          ls -la xapk_extract
+          cp xapk_extract/com.fadariwyat.cenele.apk splits_sys/base.apk
+          cp xapk_extract/config.arm64_v8a.apk splits_sys/split_config.arm64_v8a.apk
+          cp xapk_extract/config.en.apk splits_sys/split_config.en.apk
+          cp xapk_extract/config.fr.apk splits_sys/split_config.fr.apk
+          cp xapk_extract/config.mdpi.apk splits_sys/split_config.mdpi.apk
+          ls -la splits_sys
+
+      - name: Emulator + capture
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: arm64-v8a
+          profile: pixel_4
+          emulator-boot-timeout: 1800
+          disable-animations: true
+          script: bash run_capture.sh
+
+      - name: Upload capture artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: riwayat-capture
+          path: |
+            capture.log
+            uiauto.log
+            frida-out.log
+            run_capture.log
+            ui.xml
+            screen.png
+          if-no-files-found: warn
