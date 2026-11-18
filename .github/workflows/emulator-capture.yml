@@ -13,7 +13,12 @@ on:
 
 jobs:
   capture:
-    runs-on: ubuntu-latest
+    # ARM64 host: the arm64-v8a emulator runs NATIVELY here (with KVM),
+    # so the ARM64 app and Frida hooks work. On an x86_64 host the same
+    # image is rejected: "Avd's CPU Architecture 'arm64' is not supported
+    # by the QEMU2 emulator on x86_64 host" (run #2 failed exactly this way).
+    # ubuntu-24.04-arm is free and unlimited on public repos.
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 300
     steps:
       - name: Checkout
